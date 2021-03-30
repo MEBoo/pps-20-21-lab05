@@ -1,6 +1,5 @@
-package u04lab.code
+package u05lab.code
 
-import scala.annotation.tailrec
 import scala.language.postfixOps // silence warnings
 
 sealed trait List[A] {
@@ -32,12 +31,16 @@ sealed trait List[A] {
   def zipRight: List[(A,Int)]
 
   def partition(pred: A => Boolean): (List[A],List[A])
+  
+  def partitionSlow(pred: A => Boolean): (List[A],List[A])
 
   def span(pred: A => Boolean): (List[A],List[A])
 
   def reduce(op: (A,A)=>A): A
 
   def takeRight(n: Int): List[A]
+
+  def collect[B](f: PartialFunction[A,B]): List[B]
 
   // right-associative construction: 10 :: 20 :: 30 :: Nil()
   def ::(head: A): List[A] = Cons(head,this)
@@ -85,7 +88,7 @@ trait ListImplementation[A] extends List[A] {
     case _ => None
   }
   override def filter(predicate: (A) => Boolean): List[A] = this match {
-    case h :: t if (predicate(h)) => h :: (t filter predicate)
+    case h :: t if predicate(h) => h :: (t filter predicate)
     case _ :: t => (t filter predicate)
     case _ => Nil()
   }
@@ -115,19 +118,46 @@ trait ListImplementation[A] extends List[A] {
     case Nil() => Nil()
   }
 
-  override def zipRight: List[(A,Int)] = ??? // questions: what is the type of keyword ???
+  override def zipRight: List[(A,Int)] = {
+    val i=Iterator.from(0)
+    this.map((_,i.next))
+  }
 
-  override def partition(pred: A => Boolean): (List[A],List[A]) = ???
+  override def partition(pred: A => Boolean): (List[A],List[A]) = this.foldLeft ((List[A](),List[A]())) ((acc,h)=> (acc,pred(h)) match {
+    case ((a, b), true) => (a.append(h :: Nil()), b)
+    case ((a, b), false) => (a, b.append(h :: Nil()))
+  })
 
-  override def span(pred: A => Boolean): (List[A],List[A]) = ???
+  // Versione lenta
+  override def partitionSlow(pred: A => Boolean): (List[A],List[A]) = (this.filter(pred),this.filter({!pred(_)}))
+
+  override def span(pred: A => Boolean): (List[A],List[A]) = this.foldLeft ((List[A](),List[A]())) ((acc,h)=> (acc,pred(h)) match {
+    case ((a, hb :: tb), _) => (a, hb :: tb.append(h :: Nil()))
+    case ((a, Nil()), true) => (a.append(h :: Nil()), Nil())
+    case ((a, Nil()), false) => (a, h :: Nil())
+  })
 
   /**
     *
     * @throws UnsupportedOperationException if the list is empty
     */
-  override def reduce(op: (A,A)=>A): A = ???
 
-  override def takeRight(n: Int): List[A] = ???
+  override def reduce(op: (A,A)=>A): A = this match {
+    case h :: Nil() => h
+    case h :: t => op(h,t.reduce(op))
+    case Nil() => throw new UnsupportedOperationException()
+  }
+
+  override def takeRight(n: Int): List[A] = this.reverse() match {
+    case h :: t if (n>0) => t.reverse().takeRight(n-1).append(h :: Nil())
+    case _ => Nil()
+  }
+
+  override def collect[B](f: PartialFunction[A,B]): List[B] = this match {
+    case h :: t if f.isDefinedAt(h) => f(h) :: (t collect f)
+    case _ :: t => t collect f
+    case _ => Nil()
+  }
 }
 
 // Factories
